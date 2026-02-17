@@ -118,15 +118,19 @@ Host github.com
 SSHCONFIG
 
   ssh-add --apple-use-keychain "$SSH_KEY"
+  # Set up allowed_signers for commit verification
+  echo "hrv.bernardic@gmail.com $(cat ${SSH_KEY}.pub)" > "$HOME/.ssh/allowed_signers"
+
   ok "SSH key generated"
   echo ""
-  warn "Add this public key to GitHub → Settings → SSH Keys:"
+  warn "Add this key to GitHub TWICE:"
   echo ""
   cat "${SSH_KEY}.pub"
   echo ""
-  echo "  https://github.com/settings/ssh/new"
+  echo "  1. As Authentication key: https://github.com/settings/ssh/new"
+  echo "  2. As Signing key:        https://github.com/settings/ssh/new"
   echo ""
-  echo "Press Enter once you've added it..."
+  echo "Press Enter once you've added both..."
   read -r
 else
   ok "SSH key already exists"
@@ -219,6 +223,21 @@ cat > "$HOME/.gitconfig" << 'GITCONFIG'
 [difftool "sublime_merge"]
     cmd = smerge diff "$LOCAL" "$REMOTE"
 
+[gpg]
+    format = ssh
+
+[gpg "ssh"]
+    allowedSignersFile = ~/.ssh/allowed_signers
+
+[user]
+    signingkey = ~/.ssh/id_ed25519.pub
+
+[commit]
+    gpgsign = true
+
+[tag]
+    gpgsign = true
+
 [alias]
     st = status
     co = checkout
@@ -245,6 +264,43 @@ node_modules/
 .vscode/
 GITIGNORE
 ok "Global .gitignore configured"
+
+# =============================================================================
+# 11. Project directory structure
+# =============================================================================
+info "Creating project directories..."
+mkdir -p "$HOME/dev/work"
+mkdir -p "$HOME/dev/personal"
+ok "Created ~/dev/work and ~/dev/personal"
+
+# =============================================================================
+# 12. macOS defaults
+# =============================================================================
+info "Applying macOS preferences..."
+
+# -- Keyboard --
+defaults write NSGlobalDomain KeyRepeat -int 2
+defaults write NSGlobalDomain InitialKeyRepeat -int 15
+defaults write NSGlobalDomain ApplePressAndHoldEnabled -bool false
+
+# -- Trackpad --
+defaults write com.apple.AppleMultitouchTrackpad Clicking -bool true
+defaults -currentHost write NSGlobalDomain com.apple.mouse.tapBehavior -int 1
+
+# -- Dock --
+defaults write com.apple.dock autohide -bool true
+
+# -- Finder --
+defaults write NSGlobalDomain AppleShowAllExtensions -bool true
+defaults write com.apple.finder AppleShowAllFiles -bool true
+defaults write com.apple.finder ShowPathbar -bool true
+defaults write com.apple.finder FXPreferredViewStyle -string "Nlsv"
+
+# -- Apply changes --
+killall Finder 2>/dev/null || true
+killall Dock 2>/dev/null || true
+
+ok "macOS preferences applied"
 
 # =============================================================================
 # Done!
