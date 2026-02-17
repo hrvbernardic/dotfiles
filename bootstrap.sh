@@ -1,51 +1,69 @@
 #!/usr/bin/env bash
-set -euo pipefail
 
 # =============================================================================
 # Dotfiles Bootstrap Script
+# Safe to run multiple times — skips what's already done.
+#
 # Run: curl -fsSL <your-raw-github-url>/bootstrap.sh | bash
 # Or:  git clone <repo> ~/.dotfiles && cd ~/.dotfiles && ./bootstrap.sh
 # =============================================================================
 
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LOG_FILE="$DOTFILES_DIR/bootstrap.log"
 
 info()  { echo -e "\033[1;34m▸ $1\033[0m"; }
 ok()    { echo -e "\033[1;32m✓ $1\033[0m"; }
 warn()  { echo -e "\033[1;33m⚠ $1\033[0m"; }
 err()   { echo -e "\033[1;31m✗ $1\033[0m"; }
 
+step_failed=0
+run_step() {
+  local name="$1"
+  shift
+  info "$name"
+  if "$@"; then
+    ok "$name"
+  else
+    err "$name — failed (continuing...)"
+    step_failed=$((step_failed + 1))
+  fi
+}
+
 # =============================================================================
-# 1. Xcode Command Line Tools (needed for git & compilation)
+# 1. Xcode Command Line Tools
 # =============================================================================
-info "Checking Xcode Command Line Tools..."
-if ! xcode-select -p &>/dev/null; then
-  info "Installing Xcode CLT (a dialog may pop up)..."
+install_xcode_clt() {
+  if xcode-select -p &>/dev/null; then
+    ok "Xcode CLT already installed"
+    return 0
+  fi
   xcode-select --install
-  echo "Press Enter once the installation is complete."
+  echo "Press Enter once the installation dialog completes."
   read -r
-fi
-ok "Xcode CLT installed"
+}
+run_step "Xcode Command Line Tools" install_xcode_clt
 
 # =============================================================================
 # 2. Homebrew
 # =============================================================================
-info "Checking Homebrew..."
-if ! command -v brew &>/dev/null; then
-  info "Installing Homebrew..."
-  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-  # Add brew to PATH for Apple Silicon
-  if [[ -f /opt/homebrew/bin/brew ]]; then
-    eval "$(/opt/homebrew/bin/brew shellenv)"
+install_homebrew() {
+  if command -v brew &>/dev/null; then
+    ok "Homebrew already installed"
+    return 0
   fi
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+}
+run_step "Homebrew" install_homebrew
+
+# Ensure brew is on PATH (Apple Silicon)
+if [[ -f /opt/homebrew/bin/brew ]]; then
+  eval "$(/opt/homebrew/bin/brew shellenv)"
 fi
-ok "Homebrew installed"
 
 # =============================================================================
-# 3. Brewfile — install everything via brew bundle
+# 3. Brewfile
 # =============================================================================
-info "Installing packages from Brewfile..."
-cat > "$DOTFILES_DIR/Brewfile" << 'BREWFILE'
+install_brewfile() {
+  cat > "$DOTFILES_DIR/Brewfile" << 'BREWFILE'
 # -- CLI tools --
 brew "zoxide"
 brew "jq"
@@ -55,7 +73,7 @@ brew "nvm"
 cask "dia"
 cask "warp"
 cask "zed"
-cask "jetbrains-toolbox"    # Manages IntelliJ Ultimate (+ updates)
+cask "jetbrains-toolbox"
 cask "elmedia-player"
 cask "slack"
 cask "docker"
@@ -64,51 +82,73 @@ cask "raycast"
 cask "sublime-merge"
 BREWFILE
 
-brew bundle --file="$DOTFILES_DIR/Brewfile" || warn "Some casks may need manual install — check output above"
-ok "Brew packages installed"
+  brew bundle --file="$DOTFILES_DIR/Brewfile"
+}
+run_step "Brew packages" install_brewfile
 
 # =============================================================================
 # 4. NVM + Node.js
 # =============================================================================
-info "Setting up NVM + Node.js..."
-export NVM_DIR="$HOME/.nvm"
-mkdir -p "$NVM_DIR"
-# Homebrew nvm requires sourcing
-[ -s "$(brew --prefix nvm)/nvm.sh" ] && \. "$(brew --prefix nvm)/nvm.sh"
-nvm install --lts
-nvm use --lts
-nvm alias default node
-ok "Node.js $(node -v) installed via NVM"
+install_node() {
+  export NVM_DIR="$HOME/.nvm"
+  mkdir -p "$NVM_DIR"
+  [ -s "$(brew --prefix nvm)/nvm.sh" ] && \. "$(brew --prefix nvm)/nvm.sh"
+
+  if command -v node &>/dev/null; then
+    ok "Node.js $(node -v) already installed"
+    return 0
+  fi
+  nvm install --lts
+  nvm alias default node
+}
+run_step "NVM + Node.js" install_node
 
 # =============================================================================
-# 5. Claude Code (via npm)
+# 5. Claude Code
 # =============================================================================
-info "Installing Claude Code..."
-npm install -g @anthropic-ai/claude-code
-ok "Claude Code installed"
+install_claude_code() {
+  export NVM_DIR="$HOME/.nvm"
+  [ -s "$(brew --prefix nvm)/nvm.sh" ] && \. "$(brew --prefix nvm)/nvm.sh"
+
+  if command -v claude &>/dev/null; then
+    ok "Claude Code already installed"
+    return 0
+  fi
+  npm install -g @anthropic-ai/claude-code
+}
+run_step "Claude Code" install_claude_code
 
 # =============================================================================
 # 6. SDKMAN + Java
 # =============================================================================
-info "Setting up SDKMAN..."
-if [[ ! -d "$HOME/.sdkman" ]]; then
-  curl -s "https://get.sdkman.io" | bash
-fi
-source "$HOME/.sdkman/bin/sdkman-init.sh"
-info "Installing latest Java LTS..."
-sdk install java
-ok "Java installed via SDKMAN"
+install_java() {
+  if [[ ! -d "$HOME/.sdkman" ]]; then
+    curl -s "https://get.sdkman.io" | bash
+  fi
+  source "$HOME/.sdkman/bin/sdkman-init.sh"
+
+  if command -v java &>/dev/null; then
+    ok "Java already installed: $(java -version 2>&1 | head -1)"
+    return 0
+  fi
+  sdk install java
+}
+run_step "SDKMAN + Java" install_java
 
 # =============================================================================
 # 7. SSH key for GitHub
 # =============================================================================
-info "Setting up SSH key for GitHub..."
-SSH_KEY="$HOME/.ssh/id_ed25519"
-if [[ ! -f "$SSH_KEY" ]]; then
+setup_ssh() {
+  local SSH_KEY="$HOME/.ssh/id_ed25519"
+
+  if [[ -f "$SSH_KEY" ]]; then
+    ok "SSH key already exists"
+    return 0
+  fi
+
   ssh-keygen -t ed25519 -C "hrv.bernardic@gmail.com" -f "$SSH_KEY" -N ""
   eval "$(ssh-agent -s)"
 
-  # Create/update SSH config
   mkdir -p "$HOME/.ssh"
   cat > "$HOME/.ssh/config" << 'SSHCONFIG'
 Host github.com
@@ -118,10 +158,10 @@ Host github.com
 SSHCONFIG
 
   ssh-add --apple-use-keychain "$SSH_KEY"
-  # Set up allowed_signers for commit verification
+
+  # Allowed signers for commit verification
   echo "hrv.bernardic@gmail.com $(cat ${SSH_KEY}.pub)" > "$HOME/.ssh/allowed_signers"
 
-  ok "SSH key generated"
   echo ""
   warn "Add this key to GitHub TWICE:"
   echo ""
@@ -132,17 +172,31 @@ SSHCONFIG
   echo ""
   echo "Press Enter once you've added both..."
   read -r
-else
-  ok "SSH key already exists"
-fi
+}
+run_step "SSH key for GitHub" setup_ssh
 
 # =============================================================================
-# 8. Dotfiles — .zshrc
+# 8. .zshrc
 # =============================================================================
-info "Setting up .zshrc..."
-cat > "$HOME/.zshrc" << 'ZSHRC'
+setup_zshrc() {
+  local ZSHRC="$HOME/.zshrc"
+  local MARKER="# managed-by-dotfiles"
+
+  if [[ -f "$ZSHRC" ]] && grep -q "$MARKER" "$ZSHRC"; then
+    ok ".zshrc already managed by dotfiles — skipping"
+    return 0
+  fi
+
+  # Backup existing .zshrc if it exists and isn't ours
+  if [[ -f "$ZSHRC" ]]; then
+    cp "$ZSHRC" "${ZSHRC}.backup.$(date +%s)"
+    warn "Existing .zshrc backed up"
+  fi
+
+  cat > "$ZSHRC" << 'ZSHRC'
+# managed-by-dotfiles
 # =============================================================================
-# .zshrc — managed by dotfiles
+# .zshrc
 # =============================================================================
 
 # -- Homebrew --
@@ -179,23 +233,38 @@ alias gd="git diff"
 alias gco="git checkout"
 alias gb="git branch"
 alias gl="git log --oneline --graph --decorate -20"
-alias dc="docker compose"
 alias cls="clear"
 alias zed.="zed ."
 
-# -- PATH additions --
-# (add custom paths here)
+# -- Custom (add your own below) --
+
 ZSHRC
-ok ".zshrc configured"
+}
+run_step ".zshrc" setup_zshrc
 
 # =============================================================================
-# 9. Dotfiles — .gitconfig
+# 9. .gitconfig
 # =============================================================================
-info "Setting up .gitconfig..."
-cat > "$HOME/.gitconfig" << 'GITCONFIG'
+setup_gitconfig() {
+  local GITCONFIG="$HOME/.gitconfig"
+  local MARKER="# managed-by-dotfiles"
+
+  if [[ -f "$GITCONFIG" ]] && grep -q "$MARKER" "$GITCONFIG"; then
+    ok ".gitconfig already managed by dotfiles — skipping"
+    return 0
+  fi
+
+  if [[ -f "$GITCONFIG" ]]; then
+    cp "$GITCONFIG" "${GITCONFIG}.backup.$(date +%s)"
+    warn "Existing .gitconfig backed up"
+  fi
+
+  cat > "$GITCONFIG" << 'GITCONFIG'
+# managed-by-dotfiles
 [user]
     name = Hrvoje Bernardić
     email = hrv.bernardic@gmail.com
+    signingkey = ~/.ssh/id_ed25519.pub
 
 [core]
     editor = zed --wait
@@ -210,6 +279,18 @@ cat > "$HOME/.gitconfig" << 'GITCONFIG'
 [push]
     autoSetupRemote = true
 
+[gpg]
+    format = ssh
+
+[gpg "ssh"]
+    allowedSignersFile = ~/.ssh/allowed_signers
+
+[commit]
+    gpgsign = true
+
+[tag]
+    gpgsign = true
+
 [merge]
     tool = sublime_merge
 
@@ -223,21 +304,6 @@ cat > "$HOME/.gitconfig" << 'GITCONFIG'
 [difftool "sublime_merge"]
     cmd = smerge diff "$LOCAL" "$REMOTE"
 
-[gpg]
-    format = ssh
-
-[gpg "ssh"]
-    allowedSignersFile = ~/.ssh/allowed_signers
-
-[user]
-    signingkey = ~/.ssh/id_ed25519.pub
-
-[commit]
-    gpgsign = true
-
-[tag]
-    gpgsign = true
-
 [alias]
     st = status
     co = checkout
@@ -247,13 +313,21 @@ cat > "$HOME/.gitconfig" << 'GITCONFIG'
     undo = reset --soft HEAD~1
     amend = commit --amend --no-edit
 GITCONFIG
-ok ".gitconfig configured"
+}
+run_step ".gitconfig" setup_gitconfig
 
 # =============================================================================
 # 10. Global .gitignore
 # =============================================================================
-info "Setting up global .gitignore..."
-cat > "$HOME/.gitignore_global" << 'GITIGNORE'
+setup_gitignore() {
+  local GITIGNORE="$HOME/.gitignore_global"
+
+  if [[ -f "$GITIGNORE" ]]; then
+    ok ".gitignore_global already exists — skipping"
+    return 0
+  fi
+
+  cat > "$GITIGNORE" << 'GITIGNORE'
 .DS_Store
 .idea/
 *.iml
@@ -263,51 +337,56 @@ node_modules/
 *.log
 .vscode/
 GITIGNORE
-ok "Global .gitignore configured"
+}
+run_step "Global .gitignore" setup_gitignore
 
 # =============================================================================
 # 11. Project directory structure
 # =============================================================================
-info "Creating project directories..."
-mkdir -p "$HOME/dev/work"
-mkdir -p "$HOME/dev/personal"
-ok "Created ~/dev/work and ~/dev/personal"
+setup_dirs() {
+  mkdir -p "$HOME/dev/work"
+  mkdir -p "$HOME/dev/personal"
+}
+run_step "Project directories" setup_dirs
 
 # =============================================================================
 # 12. macOS defaults
 # =============================================================================
-info "Applying macOS preferences..."
+apply_macos_defaults() {
+  # -- Keyboard --
+  defaults write NSGlobalDomain KeyRepeat -int 2
+  defaults write NSGlobalDomain InitialKeyRepeat -int 15
+  defaults write NSGlobalDomain ApplePressAndHoldEnabled -bool false
 
-# -- Keyboard --
-defaults write NSGlobalDomain KeyRepeat -int 2
-defaults write NSGlobalDomain InitialKeyRepeat -int 15
-defaults write NSGlobalDomain ApplePressAndHoldEnabled -bool false
+  # -- Trackpad --
+  defaults write com.apple.AppleMultitouchTrackpad Clicking -bool true
+  defaults -currentHost write NSGlobalDomain com.apple.mouse.tapBehavior -int 1
 
-# -- Trackpad --
-defaults write com.apple.AppleMultitouchTrackpad Clicking -bool true
-defaults -currentHost write NSGlobalDomain com.apple.mouse.tapBehavior -int 1
+  # -- Dock --
+  defaults write com.apple.dock autohide -bool true
 
-# -- Dock --
-defaults write com.apple.dock autohide -bool true
+  # -- Finder --
+  defaults write NSGlobalDomain AppleShowAllExtensions -bool true
+  defaults write com.apple.finder AppleShowAllFiles -bool true
+  defaults write com.apple.finder ShowPathbar -bool true
+  defaults write com.apple.finder FXPreferredViewStyle -string "Nlsv"
 
-# -- Finder --
-defaults write NSGlobalDomain AppleShowAllExtensions -bool true
-defaults write com.apple.finder AppleShowAllFiles -bool true
-defaults write com.apple.finder ShowPathbar -bool true
-defaults write com.apple.finder FXPreferredViewStyle -string "Nlsv"
-
-# -- Apply changes --
-killall Finder 2>/dev/null || true
-killall Dock 2>/dev/null || true
-
-ok "macOS preferences applied"
+  # -- Apply changes --
+  killall Finder 2>/dev/null || true
+  killall Dock 2>/dev/null || true
+}
+run_step "macOS preferences" apply_macos_defaults
 
 # =============================================================================
 # Done!
 # =============================================================================
 echo ""
 echo "=========================================="
-ok "All done! 🎉"
+if [[ $step_failed -eq 0 ]]; then
+  ok "All done! 🎉"
+else
+  warn "Done with $step_failed failed step(s) — re-run to retry."
+fi
 echo "=========================================="
 echo ""
 info "Next steps:"
