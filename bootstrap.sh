@@ -70,7 +70,7 @@ brew "jq"
 brew "nvm"
 
 # -- Cask apps --
-cask "dia"
+cask "thebrowsercompany-dia"
 cask "warp"
 cask "zed"
 cask "jetbrains-toolbox"
