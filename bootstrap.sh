@@ -80,6 +80,7 @@ cask "docker"
 cask "insomnia"
 cask "raycast"
 cask "sublime-merge"
+cask "tidal"
 BREWFILE
 
   brew bundle --file="$DOTFILES_DIR/Brewfile"
