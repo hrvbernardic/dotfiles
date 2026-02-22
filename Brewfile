@@ -1,0 +1,18 @@
+# -- CLI tools --
+brew "zoxide"
+brew "jq"
+brew "nvm"
+
+# -- Cask apps --
+cask "thebrowsercompany-dia"
+cask "warp"
+cask "zed"
+cask "jetbrains-toolbox"
+cask "elmedia-player"
+cask "slack"
+cask "docker"
+cask "insomnia"
+cask "raycast"
+cask "sublime-merge"
+cask "tidal"
+cask "transmission"
