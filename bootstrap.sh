@@ -363,6 +363,9 @@ apply_macos_defaults() {
   defaults write com.apple.AppleMultitouchTrackpad Clicking -bool true
   defaults -currentHost write NSGlobalDomain com.apple.mouse.tapBehavior -int 1
 
+  # -- Clock --
+  defaults write com.apple.menuextra.clock ShowSeconds -bool true
+
   # -- Dock --
   defaults write com.apple.dock autohide -bool true
 
