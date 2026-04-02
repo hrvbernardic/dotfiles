@@ -1,6 +1,7 @@
 # -- CLI tools --
 brew "zoxide"
 brew "jq"
+brew "gh"
 brew "nvm"
 
 # -- Cask apps --

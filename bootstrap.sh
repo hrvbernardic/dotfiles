@@ -4,8 +4,8 @@
 # Dotfiles Bootstrap Script
 # Safe to run multiple times — skips what's already done.
 #
-# Run: curl -fsSL <your-raw-github-url>/bootstrap.sh | bash
-# Or:  git clone <repo> ~/.dotfiles && cd ~/.dotfiles && ./bootstrap.sh
+# Run from a cloned checkout:
+# git clone <repo> ~/.dotfiles && cd ~/.dotfiles && ./bootstrap.sh
 # =============================================================================
 
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -63,26 +63,10 @@ fi
 # 3. Brewfile
 # =============================================================================
 install_brewfile() {
-  cat > "$DOTFILES_DIR/Brewfile" << 'BREWFILE'
-# -- CLI tools --
-brew "zoxide"
-brew "jq"
-brew "nvm"
-
-# -- Cask apps --
-cask "thebrowsercompany-dia"
-cask "warp"
-cask "zed"
-cask "jetbrains-toolbox"
-cask "elmedia-player"
-cask "slack"
-cask "docker"
-cask "insomnia"
-cask "raycast"
-cask "sublime-merge"
-cask "tidal"
-BREWFILE
-
+  if [[ ! -f "$DOTFILES_DIR/Brewfile" ]]; then
+    err "Brewfile not found at $DOTFILES_DIR/Brewfile"
+    return 1
+  fi
   brew bundle --file="$DOTFILES_DIR/Brewfile"
 }
 run_step "Brew packages" install_brewfile
